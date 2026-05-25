@@ -441,4 +441,71 @@ class LocalStore {
       ),
     );
   }
+
+  // =========================
+  // VOICE REMINDERS
+  // =========================
+
+  static bool get isInitialized =>
+      Hive.isBoxOpen(medicinesBoxId) &&
+      Hive.isBoxOpen(foodBoxId) &&
+      Hive.isBoxOpen(settingsBoxId);
+
+  static bool readVoiceRemindersEnabled() {
+    if (!Hive.isBoxOpen(settingsBoxId)) return true;
+    return _settingsBox().get('voice_reminders_enabled', defaultValue: true) as bool;
+  }
+
+  static Future<void> writeVoiceRemindersEnabled(bool enabled) async {
+    if (!Hive.isBoxOpen(settingsBoxId)) {
+      await Hive.openBox(settingsBoxId);
+    }
+    await _settingsBox().put('voice_reminders_enabled', enabled);
+  }
+
+  static String _voiceTextKey(int alarmId) => 'voice_text_$alarmId';
+  static String _voiceMetaKey(int alarmId) => 'voice_meta_$alarmId';
+
+  static Future<void> writeReminderVoice({
+    required int alarmId,
+    required String text,
+    required int hour,
+    required int minute,
+  }) async {
+    if (!Hive.isBoxOpen(settingsBoxId)) {
+      await Hive.openBox(settingsBoxId);
+    }
+    await _settingsBox().put(_voiceTextKey(alarmId), text);
+    await _settingsBox().put(
+      _voiceMetaKey(alarmId),
+      jsonEncode({'hour': hour, 'minute': minute}),
+    );
+  }
+
+  static String? readReminderVoiceText(int alarmId) {
+    if (!Hive.isBoxOpen(settingsBoxId)) return null;
+    final v = _settingsBox().get(_voiceTextKey(alarmId));
+    return v?.toString();
+  }
+
+  static ({int hour, int minute})? readReminderVoiceMeta(int alarmId) {
+    if (!Hive.isBoxOpen(settingsBoxId)) return null;
+    final raw = _settingsBox().get(_voiceMetaKey(alarmId));
+    if (raw is! String) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return (
+        hour: _readInt(map['hour'], 8),
+        minute: _readInt(map['minute'], 0),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> deleteReminderVoice(int alarmId) async {
+    if (!Hive.isBoxOpen(settingsBoxId)) return;
+    await _settingsBox().delete(_voiceTextKey(alarmId));
+    await _settingsBox().delete(_voiceMetaKey(alarmId));
+  }
 }

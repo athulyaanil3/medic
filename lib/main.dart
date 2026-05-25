@@ -16,16 +16,20 @@ import 'services/voice_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await LocalStore.init();
+  await LocalStore.init();
 
+  try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+  } catch (e) {
+    debugPrint('Firebase init: $e');
+  }
 
+  try {
     await initNotifications();
   } catch (e) {
-    debugPrint("Initialization Error: $e");
+    debugPrint('Notifications init: $e');
   }
 
   runApp(const MyApp());

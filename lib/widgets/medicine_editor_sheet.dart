@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/medicine.dart';
 import '../providers/medicine_catalog.dart';
 import '../theme/app_theme.dart';
+import '../utils/reminder_time.dart';
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -70,7 +71,9 @@ class _MedicineEditorSheetState extends State<_MedicineEditorSheet> {
     _perDoseCtr = TextEditingController(
       text: e != null && e.dailyDose > 0 ? '${e.dailyDose}' : '',
     );
-    _times = List<String>.from(e?.reminderTimes ?? []);
+    _times = List<String>.from(
+      normalizeReminderTimes(e?.reminderTimes ?? []),
+    );
     _selectedDays = List<String>.from(e?.repeatDays ?? []);
     _trackInventory = e != null && (e.stock > 0 || e.dailyDose > 0);
   }
@@ -91,7 +94,7 @@ class _MedicineEditorSheetState extends State<_MedicineEditorSheet> {
       initialTime: TimeOfDay.now(),
     );
     if (!mounted || picked == null) return;
-    final formatted = picked.format(context);
+    final formatted = formatReminderTime(picked);
     if (_times.contains(formatted)) return;
     setState(() => _times.add(formatted));
   }
@@ -120,9 +123,10 @@ class _MedicineEditorSheetState extends State<_MedicineEditorSheet> {
     if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
 
-    if (_times.isEmpty) {
+    final timesToSave = normalizeReminderTimes(_times);
+    if (timesToSave.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one reminder time.')),
+        const SnackBar(content: Text('Add at least one valid reminder time.')),
       );
       return;
     }
@@ -143,7 +147,7 @@ class _MedicineEditorSheetState extends State<_MedicineEditorSheet> {
           widget.existing!,
           name: _nameCtr.text.trim(),
           dosage: _dosageCtr.text.trim(),
-          reminderTimes: _times,
+          reminderTimes: timesToSave,
           repeatDays: repeatDays,
           stock: stock,
           dailyDose: perDose,
@@ -153,7 +157,7 @@ class _MedicineEditorSheetState extends State<_MedicineEditorSheet> {
         warning = await widget.catalog.addMedicine(
           name: _nameCtr.text.trim(),
           dosage: _dosageCtr.text.trim(),
-          reminderTimes: _times,
+          reminderTimes: timesToSave,
           repeatDays: repeatDays,
           stock: stock,
           dailyDose: perDose,
@@ -273,8 +277,8 @@ class _MedicineEditorSheetState extends State<_MedicineEditorSheet> {
                           runSpacing: 8,
                           children: [
                             for (final t in _times)
-                              Chip(
-                                label: Text(t),
+                            Chip(
+                              label: Text(displayReminderTime(t)),
                                 deleteIcon: const Icon(Icons.close, size: 18),
                                 onDeleted: _saving
                                     ? null

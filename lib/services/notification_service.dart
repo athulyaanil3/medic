@@ -1,18 +1,30 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/medicine.dart';
+import '../utils/reminder_time.dart';
+import 'reminder_voice_alarm.dart';
+import 'reminder_voice_service.dart';
 
-final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin _notifications =
+    FlutterLocalNotificationsPlugin();
 
 AndroidFlutterLocalNotificationsPlugin? get _android =>
-    _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    _notifications.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
 
-/// Whether the device can show medicine reminders at chosen times.
+@pragma('vm:entry-point')
+void onBackgroundNotificationResponse(NotificationResponse response) {
+  speakFromNotificationPayload(response.payload);
+}
+
+/// Permission status for reminders
 class ReminderPermissionStatus {
   const ReminderPermissionStatus({
     required this.notificationsEnabled,
@@ -36,7 +48,11 @@ class ReminderPermissionStatus {
 }
 
 class NotificationScheduleResult {
-  const NotificationScheduleResult({required this.ok, this.message, this.scheduledCount = 0});
+  const NotificationScheduleResult({
+    required this.ok,
+    this.message,
+    this.scheduledCount = 0,
+  });
 
   final bool ok;
   final String? message;
@@ -46,58 +62,58 @@ class NotificationScheduleResult {
 Future<void> initNotifications() async {
   tz_data.initializeTimeZones();
   await _configureLocalTimeZone();
+  await initReminderVoiceAlarms();
 
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+
   await _notifications.initialize(
     const InitializationSettings(
       android: androidInit,
       iOS: DarwinInitializationSettings(),
     ),
     onDidReceiveNotificationResponse: (response) {
-      if (kDebugMode) {
-        debugPrint('Notification tapped: ${response.payload}');
-      }
+      speakFromNotificationPayload(response.payload);
     },
+    onDidReceiveBackgroundNotificationResponse: onBackgroundNotificationResponse,
   );
 
   const channel = AndroidNotificationChannel(
     'medic_reminders_v1',
     'Medicine reminders',
-    description: 'Daily medicine dose reminders at your chosen times',
+    description: 'Daily medicine dose reminders with voice',
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
   );
-  await _android?.createNotificationChannel(channel);
 
+  await _android?.createNotificationChannel(channel);
   await ensureReminderPermissions(requestIfNeeded: true);
+
+  final launch = await _notifications.getNotificationAppLaunchDetails();
+  if (launch?.didNotificationLaunchApp == true) {
+    speakFromNotificationPayload(launch?.notificationResponse?.payload);
+  }
 }
 
 Future<void> _configureLocalTimeZone() async {
   try {
-    final tzInfo = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
-    if (kDebugMode) debugPrint('Notification timezone: ${tzInfo.identifier}');
-    return;
+    final TimezoneInfo timezone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(timezone.identifier));
+    if (kDebugMode) {
+      debugPrint('Notification timezone: ${timezone.identifier}');
+    }
   } catch (e) {
-    if (kDebugMode) debugPrint('FlutterTimezone failed: $e');
-  }
-
-  // Fallback: guess from device offset (common India UTC+5:30).
-  final offset = DateTime.now().timeZoneOffset;
-  final hours = offset.inHours;
-  if (hours == 5 && offset.inMinutes % 60 == 30) {
+    if (kDebugMode) debugPrint('Timezone setup failed: $e');
     tz.setLocalLocation(tz.getLocation('Asia/Kolkata'));
-    return;
   }
-  tz.setLocalLocation(tz.getLocation('UTC'));
-  if (kDebugMode) debugPrint('Notification timezone fallback: UTC');
 }
 
 Future<ReminderPermissionStatus> getReminderPermissionStatus() async {
   if (defaultTargetPlatform == TargetPlatform.android) {
-    final notificationsEnabled = await _android?.areNotificationsEnabled() ?? false;
-    final exactAlarmsEnabled = await _android?.canScheduleExactNotifications() ?? false;
+    final notificationsEnabled =
+        await _android?.areNotificationsEnabled() ?? false;
+    final exactAlarmsEnabled =
+        await _android?.canScheduleExactNotifications() ?? false;
     return ReminderPermissionStatus(
       notificationsEnabled: notificationsEnabled,
       exactAlarmsEnabled: exactAlarmsEnabled,
@@ -110,12 +126,15 @@ Future<ReminderPermissionStatus> getReminderPermissionStatus() async {
   );
 }
 
-/// Requests notification + exact-alarm permission (Android 12+).
-Future<ReminderPermissionStatus> ensureReminderPermissions({bool requestIfNeeded = true}) async {
+Future<ReminderPermissionStatus> ensureReminderPermissions({
+  bool requestIfNeeded = true,
+}) async {
   if (requestIfNeeded) {
     if (defaultTargetPlatform == TargetPlatform.android) {
       await _android?.requestNotificationsPermission();
-      await _android?.requestExactAlarmsPermission();
+      if (await Permission.scheduleExactAlarm.isDenied) {
+        await Permission.scheduleExactAlarm.request();
+      }
     } else {
       await Permission.notification.request();
     }
@@ -127,44 +146,61 @@ Future<void> openReminderPermissionSettings() async {
   if (defaultTargetPlatform == TargetPlatform.android) {
     final status = await getReminderPermissionStatus();
     if (!status.exactAlarmsEnabled) {
-      await _android?.requestExactAlarmsPermission();
+      if (await Permission.scheduleExactAlarm.isDenied) {
+        await Permission.scheduleExactAlarm.request();
+      }
       return;
     }
   }
   await openAppSettings();
 }
 
-/// Unique per medicine + time slot (supports many medicines without ID clashes).
 int reminderNotificationId(String medicineId, int slotIndex) {
   final combined = Object.hash(medicineId, slotIndex);
   return (combined & 0x7fffffff).clamp(1, 2147483646);
 }
 
-Future<void> cancelMedicineNotifications(Medicine m) async {
-  for (var i = 0; i < m.reminderTimes.length; i++) {
-    await _notifications.cancel(reminderNotificationId(m.id, i));
+String _notificationPayload(Medicine medicine) => jsonEncode({
+      'id': medicine.id,
+      'name': medicine.name,
+      'dosage': medicine.dosage,
+    });
+
+Future<void> cancelMedicineNotifications(Medicine medicine) async {
+  for (var i = 0; i < medicine.reminderTimes.length; i++) {
+    final id = reminderNotificationId(medicine.id, i);
+    await _notifications.cancel(id);
+    await cancelVoiceAlarm(id);
   }
 }
 
-Future<void> rescheduleAllMedicineNotifications(List<Medicine> meds) async {
+Future<void> cancelAllMedicineReminders() async {
   await _notifications.cancelAll();
-  for (final m in meds) {
-    await scheduleMedicineNotifications(m);
+}
+
+Future<void> rescheduleAllMedicineNotifications(List<Medicine> medicines) async {
+  await cancelAllMedicineReminders();
+  for (final medicine in medicines) {
+    await scheduleMedicineNotifications(medicine);
   }
 }
 
-Future<NotificationScheduleResult> scheduleMedicineNotifications(Medicine medicine) async {
+Future<NotificationScheduleResult> scheduleMedicineNotifications(
+  Medicine medicine,
+) async {
   final permission = await ensureReminderPermissions(requestIfNeeded: true);
+
   if (!permission.ready) {
     return NotificationScheduleResult(
       ok: false,
-      message: permission.setupHint ?? 'Enable notifications to get dose reminders.',
+      message: permission.setupHint ?? 'Enable notifications to get reminders.',
     );
   }
 
   final canExact = defaultTargetPlatform == TargetPlatform.android
       ? (await _android?.canScheduleExactNotifications() ?? false)
       : true;
+
   final scheduleMode = canExact
       ? AndroidScheduleMode.exactAllowWhileIdle
       : AndroidScheduleMode.inexactAllowWhileIdle;
@@ -176,80 +212,78 @@ Future<NotificationScheduleResult> scheduleMedicineNotifications(Medicine medici
     interruptionLevel: InterruptionLevel.timeSensitive,
   );
 
+  final speechText = ReminderVoiceService.buildMessage(medicine);
   var scheduled = 0;
   String? lastError;
 
   for (var i = 0; i < medicine.reminderTimes.length; i++) {
-    final hm = medicine.reminderTimes[i].split(':');
-    if (hm.length != 2) continue;
-    final h = int.tryParse(hm[0]);
-    final min = int.tryParse(hm[1]);
-    if (h == null || min == null || h > 23 || min > 59) continue;
+    final parsed = parseReminderTime(medicine.reminderTimes[i]);
+    if (parsed == null) {
+      if (kDebugMode) {
+        debugPrint(
+          'Skip invalid reminder time "${medicine.reminderTimes[i]}" for ${medicine.name}',
+        );
+      }
+      continue;
+    }
 
-    final when = _nextOccurrence(h, min);
+    final when = _nextOccurrence(parsed.hour, parsed.minute);
+    final id = reminderNotificationId(medicine.id, i);
+    final payload = _notificationPayload(medicine);
+
     final androidDetails = AndroidNotificationDetails(
       'medic_reminders_v1',
       'Medicine reminders',
-      channelDescription: 'Daily medicine reminder times.',
+      channelDescription: 'Daily medicine reminder times',
       importance: Importance.max,
       priority: Priority.high,
       category: AndroidNotificationCategory.alarm,
       visibility: NotificationVisibility.public,
       styleInformation: BigTextStyleInformation(
-        medicine.dosage.isEmpty ? 'Time to take your medicine' : medicine.dosage,
+        medicine.dosage.isEmpty ? speechText : '${medicine.dosage}\n$speechText',
       ),
     );
 
-    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-    final id = reminderNotificationId(medicine.id, i);
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
 
     try {
       await _notifications.zonedSchedule(
         id,
         '💊 ${medicine.name}',
-        medicine.dosage.isNotEmpty
-            ? medicine.dosage
-            : 'Reminder • ${medicine.reminderTimes[i]}',
+        medicine.dosage.isNotEmpty ? medicine.dosage : speechText,
         when,
         details,
-        payload: medicine.id,
+        payload: payload,
         androidScheduleMode: scheduleMode,
         matchDateTimeComponents: DateTimeComponents.time,
       );
+
+      await scheduleVoiceAlarmForReminder(
+        alarmId: id,
+        when: when,
+        speechText: speechText,
+        hour: parsed.hour,
+        minute: parsed.minute,
+      );
+
       scheduled++;
+
       if (kDebugMode) {
-        debugPrint('Scheduled ${medicine.name} @ ${medicine.reminderTimes[i]} → $when (exact=$canExact)');
+        debugPrint('Scheduled ${medicine.name} at ${medicine.reminderTimes[i]} + voice');
       }
     } catch (e) {
       lastError = e.toString();
-      if (kDebugMode) debugPrint('Schedule failed ($scheduleMode): $e');
-      if (scheduleMode == AndroidScheduleMode.exactAllowWhileIdle) {
-        try {
-          await _notifications.zonedSchedule(
-            id,
-            '💊 ${medicine.name}',
-            medicine.dosage.isNotEmpty
-                ? medicine.dosage
-                : 'Reminder • ${medicine.reminderTimes[i]}',
-            when,
-            details,
-            payload: medicine.id,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-            matchDateTimeComponents: DateTimeComponents.time,
-          );
-          scheduled++;
-        } catch (e2) {
-          lastError = e2.toString();
-          if (kDebugMode) debugPrint('Inexact schedule also failed: $e2');
-        }
-      }
+      if (kDebugMode) debugPrint('Scheduling failed: $e');
     }
   }
 
   if (scheduled == 0) {
     return NotificationScheduleResult(
       ok: false,
-      message: lastError ?? 'Could not schedule reminders. Check notification & alarm permissions.',
+      message: lastError ?? 'Could not schedule reminders.',
     );
   }
 
@@ -257,29 +291,39 @@ Future<NotificationScheduleResult> scheduleMedicineNotifications(Medicine medici
     return NotificationScheduleResult(
       ok: true,
       scheduledCount: scheduled,
-      message: 'Reminders set. Allow "Alarms & reminders" in settings for exact times.',
+      message: 'Reminders set with voice (${ReminderVoiceService.languageTag()}). Allow exact alarms for precise timing.',
     );
   }
 
-  return NotificationScheduleResult(ok: true, scheduledCount: scheduled);
+  return NotificationScheduleResult(
+    ok: true,
+    scheduledCount: scheduled,
+    message: 'Reminders set with local voice alert.',
+  );
 }
 
-/// Next daily occurrence in local timezone. If today's time just passed (< 3 min), fire soon.
 tz.TZDateTime _nextOccurrence(int hour, int minute) {
   final now = tz.TZDateTime.now(tz.local);
-  var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+  var scheduled = tz.TZDateTime(
+    tz.local,
+    now.year,
+    now.month,
+    now.day,
+    hour,
+    minute,
+  );
 
-  if (!scheduled.isAfter(now)) {
+  if (scheduled.isBefore(now)) {
     final lateBy = now.difference(scheduled);
     if (lateBy.inMinutes < 3) {
       return now.add(const Duration(seconds: 15));
     }
     scheduled = scheduled.add(const Duration(days: 1));
   }
+
   return scheduled;
 }
 
-/// Debug: show a test notification immediately (proves permissions work).
 Future<void> showTestReminderNotification() async {
   const androidDetails = AndroidNotificationDetails(
     'medic_reminders_v1',
@@ -287,10 +331,20 @@ Future<void> showTestReminderNotification() async {
     importance: Importance.max,
     priority: Priority.high,
   );
+
+  const testSpeech = 'This is a test medicine reminder.';
+
   await _notifications.show(
     999001,
     '💊 Test reminder',
-    'Notifications are working. Your dose alarms will appear like this.',
+    testSpeech,
     const NotificationDetails(android: androidDetails),
+  );
+
+  await ReminderVoiceService.speak(
+    ReminderVoiceService.buildMessageFromParts(
+      name: 'Test medicine',
+      dosage: 'one tablet',
+    ),
   );
 }

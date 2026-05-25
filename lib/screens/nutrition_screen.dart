@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+
+import '../services/local_store.dart';
 
 import '../models/food_entry.dart';
 import '../providers/calorie_journal.dart';
@@ -31,8 +34,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<CalorieJournal>().reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        if (!Hive.isBoxOpen(LocalStore.foodBoxId) ||
+            !Hive.isBoxOpen(LocalStore.settingsBoxId)) {
+          await LocalStore.init();
+        }
+        if (mounted) context.read<CalorieJournal>().reload();
+      } catch (e) {
+        debugPrint('NutritionScreen init: $e');
+      }
     });
   }
 
@@ -157,6 +169,42 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    try {
+      return _buildContent(context);
+    } catch (e, st) {
+      debugPrint('NutritionScreen build error: $e\n$st');
+      return MediBackground(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 48, color: AppTheme.accentCoral),
+                const SizedBox(height: 16),
+                const Text(
+                  'Food log could not load',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                ),
+                const SizedBox(height: 8),
+                Text('$e', textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.inkMuted)),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    context.read<CalorieJournal>().reload();
+                    setState(() {});
+                  },
+                  child: const Text('Try again'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildContent(BuildContext context) {
     final j = context.watch<CalorieJournal>();
     final today = j.todayEntries;
     final byMeal = j.todayByMeal;

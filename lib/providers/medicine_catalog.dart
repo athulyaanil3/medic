@@ -8,6 +8,7 @@ import '../models/medicine.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/local_store.dart';
 import '../services/notification_service.dart';
+import '../utils/reminder_time.dart';
 
 class MedicineCatalog extends ChangeNotifier {
 
@@ -36,6 +37,15 @@ class MedicineCatalog extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-normalize times and reschedule all local notifications.
+  Future<String?> rescheduleReminders() async {
+    await _normalizeAllMedicineTimes();
+    reload();
+    await _rescheduleAllWithFeedback();
+    _notifyAfterFrame();
+    return _lastScheduleMessage;
+  }
+
   // CLOUD SYNC
 
   Future<void>
@@ -60,21 +70,10 @@ class MedicineCatalog extends ChangeNotifier {
 
     reload();
 
-    try {
+    await _normalizeAllMedicineTimes();
+    reload();
 
-      await rescheduleAllMedicineNotifications(
-        _items,
-      );
-
-    } catch (e) {
-
-      if (kDebugMode) {
-
-        debugPrint(
-          'Reschedule notifications: $e',
-        );
-      }
-    }
+    await _rescheduleAllWithFeedback();
 
     notifyListeners();
   }
@@ -108,9 +107,11 @@ class MedicineCatalog extends ChangeNotifier {
       return 'Medicine name is required.';
     }
 
-    if (reminderTimes.isEmpty) {
+    final normalizedTimes = normalizeReminderTimes(reminderTimes);
 
-      return 'Add at least one reminder time.';
+    if (normalizedTimes.isEmpty) {
+
+      return 'Add at least one valid reminder time.';
     }
 
     final medicine =
@@ -123,7 +124,7 @@ class MedicineCatalog extends ChangeNotifier {
       dosage: dosage.trim(),
 
       reminderTimes:
-      reminderTimes,
+      normalizedTimes,
 
       repeatDays:
       repeatDays,
@@ -153,6 +154,9 @@ class MedicineCatalog extends ChangeNotifier {
 
     _items =
         LocalStore.readMedicines();
+
+    await _normalizeAllMedicineTimes();
+    _items = LocalStore.readMedicines();
 
     // RESCHEDULE NOTIFICATIONS
 
@@ -205,6 +209,12 @@ class MedicineCatalog extends ChangeNotifier {
       old,
     );
 
+    final normalizedTimes = normalizeReminderTimes(reminderTimes);
+
+    if (normalizedTimes.isEmpty) {
+      return 'Add at least one valid reminder time.';
+    }
+
     final updated =
     Medicine(
 
@@ -215,7 +225,7 @@ class MedicineCatalog extends ChangeNotifier {
       dosage: dosage.trim(),
 
       reminderTimes:
-      reminderTimes,
+      normalizedTimes,
 
       repeatDays:
       repeatDays,
@@ -248,6 +258,9 @@ class MedicineCatalog extends ChangeNotifier {
 
     _items =
         LocalStore.readMedicines();
+
+    await _normalizeAllMedicineTimes();
+    _items = LocalStore.readMedicines();
 
     // RESCHEDULE
 
@@ -375,40 +388,79 @@ class MedicineCatalog extends ChangeNotifier {
 
   // RESCHEDULE ALL
 
-  Future<void>
-  _rescheduleAllWithFeedback()
-  async {
+  Future<void> _normalizeAllMedicineTimes() async {
+    for (final m in _items) {
+      final times = normalizeReminderTimes(m.reminderTimes);
+      if (times.isEmpty) continue;
 
-    try {
+      var same = times.length == m.reminderTimes.length;
+      if (same) {
+        for (var i = 0; i < times.length; i++) {
+          if (times[i] != m.reminderTimes[i]) {
+            same = false;
+            break;
+          }
+        }
+      }
+      if (same) continue;
 
-      await rescheduleAllMedicineNotifications(
-        _items,
+      await LocalStore.upsertMedicine(
+        Medicine(
+          id: m.id,
+          name: m.name,
+          dosage: m.dosage,
+          reminderTimes: times,
+          repeatDays: m.repeatDays,
+          stock: m.stock,
+          dailyDose: m.dailyDose,
+          notes: m.notes,
+          createdAt: m.createdAt,
+        ),
       );
+    }
+  }
 
-      final status =
-      await getReminderPermissionStatus();
-
-      _lastScheduleMessage =
-
-      status.ready
-
-          ? null
-
-          : (status.setupHint ??
-
-          'Enable notifications for reminders.');
-
-    } catch (e) {
-
-      if (kDebugMode) {
-
-        debugPrint(
-          'Reschedule all: $e',
-        );
+  Future<void> _rescheduleAllWithFeedback() async {
+    try {
+      await cancelAllMedicineReminders();
+      for (final m in _items) {
+        await cancelMedicineNotifications(m);
       }
 
-      _lastScheduleMessage =
-      'Saved. Allow notifications for reminders.';
+      var totalScheduled = 0;
+      String? firstError;
+
+      for (final m in _items) {
+        final result = await scheduleMedicineNotifications(m);
+        if (result.ok) {
+          totalScheduled += result.scheduledCount;
+        } else if (firstError == null) {
+          firstError = result.message;
+        }
+      }
+
+      final status = await getReminderPermissionStatus();
+
+      if (!status.ready) {
+        _lastScheduleMessage =
+            status.setupHint ?? 'Enable notifications for reminders.';
+      } else if (_items.isNotEmpty && totalScheduled == 0) {
+        _lastScheduleMessage = firstError ??
+            'Reminders not scheduled. Re-open each medicine and add a valid time (e.g. 8:00 AM).';
+      } else if (totalScheduled > 0) {
+        _lastScheduleMessage = 'Scheduled $totalScheduled reminder(s).';
+        if (!status.exactAlarmsEnabled) {
+          _lastScheduleMessage =
+              '$totalScheduled reminder(s) set. Allow exact alarms for on-time alerts.';
+        }
+      } else {
+        _lastScheduleMessage = null;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Reschedule all: $e');
+      }
+      _lastScheduleMessage = 'Saved locally. Turn on notifications in Settings.';
     }
   }
 

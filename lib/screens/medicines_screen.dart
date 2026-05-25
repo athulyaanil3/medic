@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/medicine_catalog.dart';
 import '../services/notification_service.dart';
+import '../utils/reminder_time.dart';
 import '../theme/app_theme.dart';
 import '../widgets/medi_background.dart';
 import '../widgets/medicine_editor_sheet.dart';
@@ -42,9 +43,7 @@ class _MedicinesScreenState
 
     catalog.reload();
 
-    await rescheduleAllMedicineNotifications(
-      catalog.items,
-    );
+    final msg = await catalog.rescheduleReminders();
 
     final status =
     await getReminderPermissionStatus();
@@ -54,6 +53,11 @@ class _MedicinesScreenState
       setState(() {
         _permissionStatus = status;
       });
+      if (msg != null && msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
     }
   }
 
@@ -471,7 +475,7 @@ class _MedicinesScreenState
 
                               MediChip(
 
-                                label: t,
+                                label: displayReminderTime(t),
 
                                 icon: Icons
                                     .schedule_rounded,
