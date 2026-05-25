@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/medicine.dart';
@@ -11,7 +12,6 @@ import '../services/notification_service.dart';
 class MedicineCatalog extends ChangeNotifier {
 
   MedicineCatalog() {
-
     reload();
   }
 
@@ -24,8 +24,9 @@ class MedicineCatalog extends ChangeNotifier {
   List<Medicine> get items =>
       List.unmodifiable(_items);
 
-  int get count =>
-      _items.length;
+  int get count => _items.length;
+
+  // RELOAD LOCAL DATA
 
   void reload() {
 
@@ -34,6 +35,8 @@ class MedicineCatalog extends ChangeNotifier {
 
     notifyListeners();
   }
+
+  // CLOUD SYNC
 
   Future<void>
   syncWithCloudAndReschedule()
@@ -77,6 +80,7 @@ class MedicineCatalog extends ChangeNotifier {
   }
 
   // ADD MEDICINE
+
   Future<String?> addMedicine({
 
     required String name,
@@ -86,9 +90,14 @@ class MedicineCatalog extends ChangeNotifier {
     required List<String>
     reminderTimes,
 
-    // NEW
     required List<String>
     repeatDays,
+
+    // NEW
+    required int stock,
+
+    // NEW
+    required int dailyDose,
 
     String? notes,
 
@@ -116,9 +125,15 @@ class MedicineCatalog extends ChangeNotifier {
       reminderTimes:
       reminderTimes,
 
-      // NEW
       repeatDays:
       repeatDays,
+
+      // NEW
+      stock: stock,
+
+      // NEW
+      dailyDose:
+      dailyDose,
 
       notes:
       (notes == null ||
@@ -129,6 +144,8 @@ class MedicineCatalog extends ChangeNotifier {
           : notes.trim(),
     );
 
+    // SAVE LOCAL
+
     await LocalStore
         .upsertMedicine(
       medicine,
@@ -137,9 +154,13 @@ class MedicineCatalog extends ChangeNotifier {
     _items =
         LocalStore.readMedicines();
 
+    // RESCHEDULE NOTIFICATIONS
+
     await _rescheduleAllWithFeedback();
 
-    notifyListeners();
+    _notifyAfterFrame();
+
+    // CLOUD PUSH
 
     unawaited(
 
@@ -153,6 +174,7 @@ class MedicineCatalog extends ChangeNotifier {
   }
 
   // EDIT MEDICINE
+
   Future<String?> replaceMedicine(
 
       Medicine old, {
@@ -164,13 +186,20 @@ class MedicineCatalog extends ChangeNotifier {
         required List<String>
         reminderTimes,
 
-        // NEW
         required List<String>
         repeatDays,
+
+        // NEW
+        required int stock,
+
+        // NEW
+        required int dailyDose,
 
         String? notes,
 
       }) async {
+
+    // CANCEL OLD NOTIFICATIONS
 
     await cancelMedicineNotifications(
       old,
@@ -188,9 +217,15 @@ class MedicineCatalog extends ChangeNotifier {
       reminderTimes:
       reminderTimes,
 
-      // NEW
       repeatDays:
       repeatDays,
+
+      // NEW
+      stock: stock,
+
+      // NEW
+      dailyDose:
+      dailyDose,
 
       notes:
       (notes == null ||
@@ -204,6 +239,8 @@ class MedicineCatalog extends ChangeNotifier {
       old.createdAt,
     );
 
+    // SAVE UPDATED
+
     await LocalStore
         .upsertMedicine(
       updated,
@@ -212,9 +249,13 @@ class MedicineCatalog extends ChangeNotifier {
     _items =
         LocalStore.readMedicines();
 
+    // RESCHEDULE
+
     await _rescheduleAllWithFeedback();
 
-    notifyListeners();
+    _notifyAfterFrame();
+
+    // CLOUD UPDATE
 
     unawaited(
 
@@ -228,13 +269,18 @@ class MedicineCatalog extends ChangeNotifier {
   }
 
   // DELETE MEDICINE
+
   Future<void> removeMedicine(
       Medicine medicine,
       ) async {
 
+    // CANCEL NOTIFICATIONS
+
     await cancelMedicineNotifications(
       medicine,
     );
+
+    // DELETE LOCAL
 
     await LocalStore
         .deleteMedicine(
@@ -244,9 +290,13 @@ class MedicineCatalog extends ChangeNotifier {
     _items =
         LocalStore.readMedicines();
 
+    // RESCHEDULE
+
     await _rescheduleAllWithFeedback();
 
     notifyListeners();
+
+    // DELETE CLOUD
 
     unawaited(
 
@@ -257,7 +307,74 @@ class MedicineCatalog extends ChangeNotifier {
     );
   }
 
-  // RESCHEDULE
+  // REDUCE STOCK
+
+  Future<void> reduceStock(
+      Medicine medicine,
+      ) async {
+
+    if (medicine.stock <= 0 || medicine.dailyDose <= 0) return;
+
+    int updatedStock =
+        medicine.stock -
+            medicine.dailyDose;
+
+    if (updatedStock < 0) {
+      updatedStock = 0;
+    }
+
+    final updatedMedicine =
+    Medicine(
+
+      id: medicine.id,
+
+      name: medicine.name,
+
+      dosage: medicine.dosage,
+
+      reminderTimes:
+      medicine.reminderTimes,
+
+      repeatDays:
+      medicine.repeatDays,
+
+      stock: updatedStock,
+
+      dailyDose:
+      medicine.dailyDose,
+
+      notes:
+      medicine.notes,
+
+      createdAt:
+      medicine.createdAt,
+    );
+
+    await LocalStore
+        .upsertMedicine(
+      updatedMedicine,
+    );
+
+    _items =
+        LocalStore.readMedicines();
+
+    notifyListeners();
+
+    // LOW STOCK ALERT
+
+    if (updatedStock <= 3) {
+
+      if (kDebugMode) {
+
+        debugPrint(
+          '${medicine.name} stock is running low.',
+        );
+      }
+    }
+  }
+
+  // RESCHEDULE ALL
+
   Future<void>
   _rescheduleAllWithFeedback()
   async {
@@ -272,6 +389,7 @@ class MedicineCatalog extends ChangeNotifier {
       await getReminderPermissionStatus();
 
       _lastScheduleMessage =
+
       status.ready
 
           ? null
@@ -292,5 +410,12 @@ class MedicineCatalog extends ChangeNotifier {
       _lastScheduleMessage =
       'Saved. Allow notifications for reminders.';
     }
+  }
+
+  void _notifyAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!hasListeners) return;
+      notifyListeners();
+    });
   }
 }

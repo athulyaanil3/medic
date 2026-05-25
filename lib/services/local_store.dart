@@ -6,58 +6,439 @@ import '../models/food_entry.dart';
 import '../models/medicine.dart';
 
 class LocalStore {
-  static const medicinesBoxId = 'medicines';
-  static const foodBoxId = 'food_logs';
 
-  static Future<void> boot() async {
+  // BOX NAMES
+
+  static const medicinesBoxId =
+      'medicines';
+
+  static const foodBoxId =
+      'food_logs';
+
+  static const settingsBoxId =
+      'app_settings';
+
+  // DEFAULT VALUES
+
+  static const defaultCalorieGoal =
+  2000;
+
+  static const defaultWaterGoalMl =
+  2500;
+
+  // INITIALIZE HIVE
+
+  static Future<void> init() async {
+
     await Hive.initFlutter();
+
     await Future.wait([
-      Hive.openBox(medicinesBoxId),
-      Hive.openBox(foodBoxId),
+
+      Hive.openBox(
+        medicinesBoxId,
+      ),
+
+      Hive.openBox(
+        foodBoxId,
+      ),
+
+      Hive.openBox(
+        settingsBoxId,
+      ),
     ]);
   }
 
-  static Box _medBox() => Hive.box(medicinesBoxId);
-  static Box _foodBox() => Hive.box(foodBoxId);
+  // BOXES
 
-  static Future<void> upsertMedicine(Medicine m) async =>
-      _medBox().put(m.id, jsonEncode(m.toMap()));
+  static Box _medBox() {
 
-  static Future<void> deleteMedicine(String id) async => _medBox().delete(id);
+    if (!Hive.isBoxOpen(
+      medicinesBoxId,
+    )) {
 
-  static List<Medicine> readMedicines() {
+      throw HiveError(
+        'Medicines box is not open.',
+      );
+    }
+
+    return Hive.box(
+      medicinesBoxId,
+    );
+  }
+
+  static Box _foodBox() {
+
+    if (!Hive.isBoxOpen(
+      foodBoxId,
+    )) {
+
+      throw HiveError(
+        'Food box is not open.',
+      );
+    }
+
+    return Hive.box(
+      foodBoxId,
+    );
+  }
+
+  static Box _settingsBox() {
+
+    if (!Hive.isBoxOpen(
+      settingsBoxId,
+    )) {
+
+      throw HiveError(
+        'Settings box is not open.',
+      );
+    }
+
+    return Hive.box(
+      settingsBoxId,
+    );
+  }
+
+  // SAFE INT PARSER
+
+  static int _readInt(
+      dynamic v,
+      int fallback,
+      ) {
+
+    if (v is int) {
+      return v;
+    }
+
+    if (v is num) {
+      return v.toInt();
+    }
+
+    return fallback;
+  }
+
+  // DATE KEY
+
+  static String _dayKey(
+      DateTime d,
+      ) {
+
+    return
+
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  // =========================
+  // MEDICINES
+  // =========================
+
+  static Future<void>
+  upsertMedicine(
+      Medicine m,
+      ) async {
+
+    await _medBox().put(
+
+      m.id,
+
+      jsonEncode(
+        m.toMap(),
+      ),
+    );
+  }
+
+  static Future<void>
+  deleteMedicine(
+      String id,
+      ) async {
+
+    await _medBox().delete(id);
+  }
+
+  static List<Medicine>
+  readMedicines() {
+
     final out = <Medicine>[];
-    for (final key in _medBox().keys) {
-      final raw = _medBox().get(key);
+
+    for (final key
+    in _medBox().keys) {
+
+      final raw =
+      _medBox().get(key);
+
       if (raw is String) {
-        out.add(Medicine.fromMap(jsonDecode(raw) as Map<String, dynamic>));
+
+        try {
+
+          out.add(
+
+            Medicine.fromMap(
+
+              jsonDecode(raw)
+              as Map<String, dynamic>,
+            ),
+          );
+
+        } catch (_) {}
       }
     }
-    out.sort((a, b) => a.name.compareTo(b.name));
+
+    out.sort(
+
+          (a, b) =>
+          a.name.compareTo(
+            b.name,
+          ),
+    );
+
     return out;
   }
 
-  static Future<void> upsertFood(FoodEntry e) async =>
-      _foodBox().put(e.id, jsonEncode(e.toMap()));
+  // =========================
+  // FOOD LOGS
+  // =========================
 
-  static Future<void> deleteFood(String id) async => _foodBox().delete(id);
+  static Future<void>
+  upsertFood(
+      FoodEntry e,
+      ) async {
 
-  static List<FoodEntry> readFoodSince(DateTime from) {
+    await _foodBox().put(
+
+      e.id,
+
+      jsonEncode(
+        e.toMap(),
+      ),
+    );
+  }
+
+  static Future<void>
+  deleteFood(
+      String id,
+      ) async {
+
+    await _foodBox().delete(id);
+  }
+
+  static List<FoodEntry>
+  readFoodSince(
+      DateTime from,
+      ) {
+
     final out = <FoodEntry>[];
-    for (final key in _foodBox().keys) {
-      final raw = _foodBox().get(key);
-      if (raw is String) {
-        final entry = FoodEntry.fromMap(jsonDecode(raw) as Map<String, dynamic>);
-        if (!entry.at.isBefore(from)) out.add(entry);
+
+    for (final key
+    in _foodBox().keys) {
+
+      final raw =
+      _foodBox().get(key);
+
+      if (raw is! String) {
+        continue;
+      }
+
+      try {
+
+        final entry =
+        FoodEntry.fromMap(
+
+          jsonDecode(raw)
+          as Map<String, dynamic>,
+        );
+
+        if (!entry.at
+            .isBefore(from)) {
+
+          out.add(entry);
+        }
+
+      } catch (_) {
+        continue;
       }
     }
-    out.sort((a, b) => b.at.compareTo(a.at));
+
+    out.sort(
+
+          (a, b) =>
+          b.at.compareTo(
+            a.at,
+          ),
+    );
+
     return out;
   }
 
-  static int todayCalorieTotal() {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    return readFoodSince(start).fold<int>(0, (s, e) => s + e.calories);
+  static List<FoodEntry>
+  readToday() {
+
+    final now =
+    DateTime.now();
+
+    final start =
+    DateTime(
+      now.year,
+      now.month,
+      now.day,
+    );
+
+    return readFoodSince(
+      start,
+    );
+  }
+
+  static int
+  todayCalorieTotal() {
+
+    return readToday().fold<int>(
+
+      0,
+
+          (s, e) =>
+      s + e.calories,
+    );
+  }
+
+  static FoodEntry?
+  lastLoggedMeal() {
+
+    final week =
+    readFoodSince(
+
+      DateTime.now().subtract(
+        const Duration(days: 7),
+      ),
+    );
+
+    return week.isEmpty
+        ? null
+        : week.first;
+  }
+
+  // =========================
+  // CALORIE GOAL
+  // =========================
+
+  static int
+  readCalorieGoal() {
+
+    if (!Hive.isBoxOpen(
+      settingsBoxId,
+    )) {
+
+      return defaultCalorieGoal;
+    }
+
+    final v =
+    _settingsBox().get(
+      'calorie_goal',
+    );
+
+    return _readInt(
+
+      v,
+
+      defaultCalorieGoal,
+
+    ).clamp(
+      1000,
+      5000,
+    );
+  }
+
+  static Future<void>
+  writeCalorieGoal(
+      int goal,
+      ) async {
+
+    if (!Hive.isBoxOpen(
+      settingsBoxId,
+    )) {
+
+      await Hive.openBox(
+        settingsBoxId,
+      );
+    }
+
+    await _settingsBox().put(
+
+      'calorie_goal',
+
+      goal.clamp(
+        1000,
+        5000,
+      ),
+    );
+  }
+
+  // =========================
+  // WATER TRACKING
+  // =========================
+
+  static int
+  readWaterMlToday() {
+
+    if (!Hive.isBoxOpen(
+      settingsBoxId,
+    )) {
+
+      return 0;
+    }
+
+    final today =
+    _dayKey(
+      DateTime.now(),
+    );
+
+    if (_settingsBox().get(
+      'water_day',
+    ) !=
+        today) {
+
+      return 0;
+    }
+
+    return _readInt(
+
+      _settingsBox().get(
+        'water_ml',
+      ),
+
+      0,
+    );
+  }
+
+  static Future<void>
+  writeWaterMlToday(
+      int ml,
+      ) async {
+
+    if (!Hive.isBoxOpen(
+      settingsBoxId,
+    )) {
+
+      await Hive.openBox(
+        settingsBoxId,
+      );
+    }
+
+    final today =
+    _dayKey(
+      DateTime.now(),
+    );
+
+    await _settingsBox().put(
+      'water_day',
+      today,
+    );
+
+    await _settingsBox().put(
+
+      'water_ml',
+
+      ml.clamp(
+        0,
+        6000,
+      ),
+    );
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// MediVoice design tokens — calm healthcare aesthetic.
 class AppTheme {
   static const Color deepTeal = Color(0xFF0A6E73);
   static const Color tealLight = Color(0xFF1BA39C);
@@ -25,10 +24,10 @@ class AppTheme {
   );
 
   static BoxShadow softShadow([double opacity = 0.12]) => BoxShadow(
-        color: deepTeal.withValues(alpha: opacity),
-        blurRadius: 24,
-        offset: const Offset(0, 10),
-      );
+    color: deepTeal.withValues(alpha: opacity),
+    blurRadius: 24,
+    offset: const Offset(0, 10),
+  );
 
   static ThemeData light() {
     final base = ThemeData(
@@ -60,7 +59,6 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         elevation: 0,
         centerTitle: true,
-        scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: ink,
         titleTextStyle: GoogleFonts.plusJakartaSans(
@@ -92,11 +90,11 @@ class AppTheme {
           fontSize: 13,
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(18)),
+          borderRadius: const BorderRadius.all(Radius.circular(18)),
           borderSide: BorderSide(color: accentCoral, width: 2),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(18)),
+          borderRadius: const BorderRadius.all(Radius.circular(18)),
           borderSide: BorderSide(color: accentCoral, width: 2),
         ),
       ),
@@ -138,8 +136,10 @@ class AppTheme {
         indicatorColor: deepTeal.withValues(alpha: 0.14),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
+
           return GoogleFonts.plusJakartaSans(
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            fontWeight:
+            selected ? FontWeight.w700 : FontWeight.w500,
             fontSize: 11,
             color: selected ? deepTeal : inkMuted,
           );

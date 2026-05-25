@@ -13,8 +13,12 @@ class CloudSyncService {
   final _connectivity = Connectivity();
 
   Future<bool> _online() async {
-    final results = await _connectivity.checkConnectivity();
-    return results.isNotEmpty && !results.contains(ConnectivityResult.none);
+
+    final result =
+    await _connectivity.checkConnectivity();
+
+    return result !=
+        ConnectivityResult.none;
   }
 
   CollectionReference<Map<String, dynamic>>? _col() {

@@ -23,15 +23,19 @@ class GlassCard extends StatelessWidget {
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite.withValues(alpha: 0.88),
+        color: AppTheme.cardWhite.withOpacity(0.88),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.2),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.8),
+          width: 1.2,
+        ),
         boxShadow: [AppTheme.softShadow(0.08)],
       ),
       child: child,
     );
 
     if (onTap == null) return card;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -65,29 +69,39 @@ class PageHeader extends StatelessWidget {
         children: [
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.ink,
-                        height: 1.15,
-                      ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.ink,
+                    height: 1.15,
+                  ),
                 ),
+
                 if (subtitle != null) ...[
                   const SizedBox(height: 6),
+
                   Text(
                     subtitle!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.inkMuted,
-                          height: 1.4,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                      color: AppTheme.inkMuted,
+                      height: 1.4,
+                    ),
                   ),
                 ],
               ],
             ),
           ),
+
           if (trailing != null) trailing!,
         ],
       ),
@@ -113,18 +127,25 @@ class IconBadge extends StatelessWidget {
     return Container(
       width: size,
       height: size,
+
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(16),
+
         boxShadow: [
           BoxShadow(
-            color: AppTheme.deepTeal.withValues(alpha: 0.25),
+            color: AppTheme.deepTeal.withOpacity(0.25),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Icon(icon, color: Colors.white, size: size * 0.48),
+
+      child: Icon(
+        icon,
+        color: Colors.white,
+        size: size * 0.48,
+      ),
     );
   }
 }
@@ -150,42 +171,62 @@ class StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
+
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(26),
+
         child: Ink(
           decoration: BoxDecoration(
             gradient: gradient,
             borderRadius: BorderRadius.circular(26),
             boxShadow: [AppTheme.softShadow(0.22)],
           ),
+
           child: Padding(
             padding: const EdgeInsets.all(20),
+
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+              CrossAxisAlignment.start,
+
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
+
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
-                    borderRadius: BorderRadius.circular(14),
+                    color: Colors.white.withOpacity(0.22),
+                    borderRadius:
+                    BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, color: Colors.white, size: 26),
+
+                  child: Icon(
+                    icon,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
+
                 const SizedBox(height: 18),
+
                 Text(
                   value,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                      ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineMedium
+                      ?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
                 ),
+
                 const SizedBox(height: 6),
+
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.92),
+                    color: Colors.white.withOpacity(0.92),
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -220,24 +261,57 @@ class FeatureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
+
       child: GlassCard(
         onTap: onTap,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+
         child: Row(
           children: [
-            IconBadge(icon: icon, gradient: accent, size: 50),
+            IconBadge(
+              icon: icon,
+              gradient: accent,
+              size: 50,
+            ),
+
             const SizedBox(width: 16),
+
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
+
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(color: AppTheme.inkMuted, fontSize: 13)),
+
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppTheme.inkMuted,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppTheme.inkMuted.withValues(alpha: 0.6)),
+
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color:
+              AppTheme.inkMuted.withOpacity(0.6),
+            ),
           ],
         ),
       ),
@@ -247,7 +321,11 @@ class FeatureRow extends StatelessWidget {
 
 /// Pill chip for times / tags.
 class MediChip extends StatelessWidget {
-  const MediChip({super.key, required this.label, this.icon});
+  const MediChip({
+    super.key,
+    required this.label,
+    this.icon,
+  });
 
   final String label;
   final IconData? icon;
@@ -255,20 +333,42 @@ class MediChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.mintGlow.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.tealLight.withValues(alpha: 0.25)),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 8,
       ),
+
+      decoration: BoxDecoration(
+        color: AppTheme.mintGlow.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+
+        border: Border.all(
+          color:
+          AppTheme.tealLight.withOpacity(0.25),
+        ),
+      ),
+
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 16, color: AppTheme.deepTeal),
+            Icon(
+              icon,
+              size: 16,
+              color: AppTheme.deepTeal,
+            ),
+
             const SizedBox(width: 6),
           ],
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.deepTeal, fontSize: 13)),
+
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.deepTeal,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );
@@ -294,31 +394,64 @@ class GradientButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: onPressed == null ? null : AppTheme.heroGradient,
+        gradient:
+        onPressed == null
+            ? null
+            : AppTheme.heroGradient,
+
         borderRadius: BorderRadius.circular(18),
-        boxShadow: onPressed == null ? null : [AppTheme.softShadow(0.2)],
+
+        boxShadow:
+        onPressed == null
+            ? null
+            : [AppTheme.softShadow(0.2)],
       ),
+
       child: Material(
-        color: onPressed == null ? AppTheme.inkMuted.withValues(alpha: 0.3) : Colors.transparent,
+        color:
+        onPressed == null
+            ? AppTheme.inkMuted.withOpacity(0.3)
+            : Colors.transparent,
+
         borderRadius: BorderRadius.circular(18),
+
         child: InkWell(
           onTap: busy ? null : onPressed,
+
           borderRadius: BorderRadius.circular(18),
+
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(
+              vertical: 16,
+            ),
+
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+              MainAxisAlignment.center,
+
               children: [
                 if (busy)
                   const SizedBox.square(
                     dimension: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 else ...[
-                  if (icon != null) ...[Icon(icon, color: Colors.white), const SizedBox(width: 10)],
+                  if (icon != null) ...[
+                    Icon(icon, color: Colors.white),
+
+                    const SizedBox(width: 10),
+                  ],
+
                   Text(
                     label,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ],

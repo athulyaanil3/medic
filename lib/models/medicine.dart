@@ -14,6 +14,12 @@ class Medicine {
 
     required this.repeatDays,
 
+    // NEW
+    required this.stock,
+
+    // NEW
+    required this.dailyDose,
+
     this.notes,
 
     DateTime? createdAt,
@@ -30,8 +36,14 @@ class Medicine {
 
   final List<String> reminderTimes;
 
-  // NEW
+  // REPEAT DAYS
   final List<String> repeatDays;
+
+  // NEW
+  final int stock;
+
+  // NEW
+  final int dailyDose;
 
   final String? notes;
 
@@ -48,9 +60,15 @@ class Medicine {
     'reminderTimes':
     reminderTimes,
 
-    // NEW
     'repeatDays':
     repeatDays,
+
+    // NEW
+    'stock': stock,
+
+    // NEW
+    'dailyDose':
+    dailyDose,
 
     'notes': notes,
 
@@ -63,6 +81,7 @@ class Medicine {
       Map<dynamic, dynamic> raw) {
 
     // REMINDER TIMES
+
     final rtDyn =
     raw['reminderTimes'];
 
@@ -86,6 +105,7 @@ class Medicine {
     }
 
     // REPEAT DAYS
+
     final rdDyn =
     raw['repeatDays'];
 
@@ -109,6 +129,7 @@ class Medicine {
     }
 
     // CREATED TIME
+
     final createdParsed =
     raw['createdAt'];
 
@@ -128,7 +149,8 @@ class Medicine {
           createdParsed.toDate();
 
     } else if (createdParsed
-        != null) {
+        !=
+        null) {
 
       created =
           DateTime.tryParse(
@@ -136,7 +158,6 @@ class Medicine {
             createdParsed
                 .toString(),
           ) ??
-
               DateTime.now();
     }
 
@@ -157,9 +178,26 @@ class Medicine {
       reminderTimes:
       reminderTimes,
 
-      // NEW
       repeatDays:
       repeatDays,
+
+      // NEW
+      stock:
+      int.tryParse(
+        raw['stock']
+            ?.toString() ??
+            '0',
+      ) ??
+          0,
+
+      // NEW
+      dailyDose:
+      int.tryParse(
+        raw['dailyDose']
+            ?.toString() ??
+            '0',
+      ) ??
+          0,
 
       notes:
       raw['notes']
